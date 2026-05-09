@@ -127,10 +127,26 @@ public class VentaService {
         response.setMontoTotal(entity.getMontoTotal());
         response.setOrigen(entity.getOrigen());
         response.setFechaVenta(entity.getFechaVenta());
+        response.setFechaFormateada(entity.getFechaVenta().toString());
 
-        // Formateo manual de fecha para el campo String (opcional)
-        if (entity.getFechaVenta() != null) {
-            response.setFechaFormateada(entity.getFechaVenta().toString());
+        // --- ESTA ES LA PARTE QUE FALTA PARA LA LISTA ---
+        try {
+            // Le pedimos al otro micro los datos del producto
+            var producto = productoClient.obtenerProductoPorId(entity.getProductoId());
+            if (producto != null) {
+                response.setNombreProducto(producto.getNombre());
+                response.setSkuProducto(producto.getSku());
+            }
+
+            // Le pedimos al otro micro los datos de la sucursal
+            var sucursal = sucursalClient.obtenerSucursalPorId(entity.getSucursalId());
+            if (sucursal != null) {
+                response.setNombreSucursal(sucursal.getNombre());
+            }
+        } catch (Exception e) {
+            // Si un micro está caído, al menos mostramos los IDs
+            response.setNombreProducto("Producto ID: " + entity.getProductoId());
+            response.setNombreSucursal("Sucursal ID: " + entity.getSucursalId());
         }
 
         return response;
