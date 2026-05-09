@@ -31,3 +31,22 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# --- Agregados para el Grupo Cordillera ---
+
+# Logs
+*.log
+logs/
+
+# Datos Sensibles (Muy importante)
+.env
+.env.local
+.env.*.local
+
+# Sistema Operativo
+.DS_Store
+Thumbs.db
+
+# Temporales de compilación adicionales
+*.temp
+*.tmp
