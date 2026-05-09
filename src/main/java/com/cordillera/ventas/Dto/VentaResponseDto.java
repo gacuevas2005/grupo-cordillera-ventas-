@@ -21,4 +21,7 @@ public class VentaResponseDto {
     private Double montoTotal;
     private String fechaFormateada;
     private String origen;
+    private Long productoId;   // Campo faltante
+    private Long sucursalId;
+    private LocalDateTime fechaVenta;
 }

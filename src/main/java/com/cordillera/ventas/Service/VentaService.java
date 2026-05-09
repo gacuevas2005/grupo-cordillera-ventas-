@@ -1,16 +1,16 @@
 package com.cordillera.ventas.Service;
 
 import com.cordillera.ventas.Interface.ProductoClient;
-import com.cordillera.ventas.Interface.SucursalClient; // <--- Nuevo Cliente
-import com.cordillera.ventas.Dto.ProductoResponseDto;
-import com.cordillera.ventas.Dto.SucursalResponseDto; // <--- Nuevo DTO
+import com.cordillera.ventas.Interface.SucursalClient;
+import com.cordillera.ventas.Interface.StockClient;
 import com.cordillera.ventas.Dto.VentaRequestDto;
 import com.cordillera.ventas.Dto.VentaResponseDto;
 import com.cordillera.ventas.Model.VentaModel;
+
 import com.cordillera.ventas.Repository.VentaRepository;
-import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,80 +26,97 @@ public class VentaService {
     private ProductoClient productoClient;
 
     @Autowired
-    private SucursalClient sucursalClient; // <--- Inyectamos SucursalClient
+    private SucursalClient sucursalClient;
 
+    @Autowired
+    private StockClient stockClient;
+
+    /**
+     * Crea una venta validando Producto, Sucursal y descontando Stock.
+     * Si falla el stock, la venta no se guarda (Rollback).
+     */
     @Transactional
     public VentaResponseDto crearVenta(VentaRequestDto dto) {
 
-        // 1. VALIDAR SUCURSAL (Microservicio externo puerto 8083)
-        SucursalResponseDto sucursal;
-        try {
-            sucursal = sucursalClient.obtenerSucursalPorId(dto.getSucursalId());
-        } catch (Exception e) {
-            throw new RuntimeException("Error: La sucursal " + dto.getSucursalId() + " no existe o el servicio de sucursales está caído.");
+        // 1. Validar existencia del Producto y obtener sus datos (Nombre, SKU)
+        var producto = productoClient.obtenerProductoPorId(dto.getProductoId());
+        if (producto == null) {
+            throw new RuntimeException("Error: El producto " + dto.getProductoId() + " no existe.");
         }
 
-        // 2. VALIDAR PRODUCTO (Microservicio externo puerto 8081)
-        ProductoResponseDto producto;
-        try {
-            producto = productoClient.obtenerProductoPorId(dto.getProductoId());
-        } catch (Exception e) {
-            throw new RuntimeException("Error: El producto no existe o el catálogo de productos está caído.");
+        // 2. Validar existencia de la Sucursal
+        var sucursal = sucursalClient.obtenerSucursalPorId(dto.getSucursalId());
+        if (sucursal == null) {
+            throw new RuntimeException("Error: La sucursal " + dto.getSucursalId() + " no existe.");
         }
 
-        // 3. Lógica de Negocio: Calcular monto total con el precio oficial
-        Double montoCalculado = producto.getPrecio() * dto.getCantidad();
+        // 3. Mapear y Guardar la Venta en la base de datos de Ventas
+        VentaModel venta = new VentaModel();
+        venta.setProductoId(dto.getProductoId());
+        venta.setSucursalId(dto.getSucursalId());
+        venta.setCantidad(dto.getCantidad());
+        venta.setOrigen(dto.getOrigen());
+        venta.setMontoTotal(dto.getMontoTotal());
+        venta.setFechaVenta(LocalDateTime.now());
 
-        // 4. Mapear y guardar la Venta
-        VentaModel entity = new VentaModel();
+        VentaModel ventaGuardada = ventaRepository.save(venta);
 
-        // ¡OJO AQUÍ!: En tu VentaModel, el campo ahora debe ser 'Long sucursalId'
-        entity.setSucursalId(dto.getSucursalId());
-        entity.setProductoId(dto.getProductoId());
+        // 4. Integración con Stock: Descontar las unidades vendidas
+        // Si el microservicio de Stock lanza error (ej: no hay suficientes),
+        // @Transactional cancelará el guardado de la venta automáticamente.
+        stockClient.consumirStock(
+                ventaGuardada.getProductoId(),
+                ventaGuardada.getSucursalId(),
+                ventaGuardada.getCantidad()
+        );
 
-        entity.setOrigen(dto.getOrigen());
-        entity.setCantidad(dto.getCantidad());
-        entity.setMontoTotal(montoCalculado);
-        entity.setFechaVenta(LocalDateTime.now());
+        // 5. Devolver respuesta con datos enriquecidos
+        VentaResponseDto response = mapToResponseDto(ventaGuardada);
+        response.setNombreProducto(producto.getNombre()); // Viene del microservicio Productos
+        response.setSkuProducto(producto.getSku());       // Viene del microservicio Productos
+        response.setNombreSucursal(sucursal.getNombre()); // Viene del microservicio Sucursales
 
-        VentaModel guardado = ventaRepository.save(entity);
-
-        // Devolvemos el DTO usando los nombres que nos dieron los otros microservicios
-        return entityToDto(guardado, producto.getNombre(), producto.getSku(), sucursal.getNombre());
+        return response;
     }
 
+    /**
+     * Lista todas las ventas registradas.
+     */
     public List<VentaResponseDto> listarVentas() {
         return ventaRepository.findAll()
                 .stream()
-                .map(venta -> {
-                    // En un listado real, podrías llamar a los otros servicios
-                    // para traer los nombres, por ahora devolvemos el ID o "Cargando..."
-                    return entityToDto(venta, "Producto ID: " + venta.getProductoId(), "N/A", "Sucursal ID: " + venta.getSucursalId());
-                })
+                .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
     }
 
-    // Mapeo refinado: recibe los nombres externos para el JSON final
-    private VentaResponseDto entityToDto(VentaModel entity, String nombreProd, String skuProd, String nombreSuc) {
-        VentaResponseDto dto = new VentaResponseDto();
-        dto.setId(entity.getId());
-        dto.setNombreSucursal(nombreSuc); // <--- Nombre que viene del microservicio
-        dto.setNombreProducto(nombreProd); // <--- Nombre que viene del microservicio
-        dto.setSkuProducto(skuProd);
-        dto.setOrigen(entity.getOrigen());
-        dto.setCantidad(entity.getCantidad());
-        dto.setMontoTotal(entity.getMontoTotal());
-        dto.setFechaFormateada(entity.getFechaVenta().toString());
-        return dto;
-    }
+    /**
+     * Filtra ventas por origen (WEB, PRESENCIAL, etc.)
+     */
     public List<VentaResponseDto> listarPorOrigen(String origen) {
         return ventaRepository.findByOrigen(origen)
                 .stream()
-                .map(venta -> {
-                    // Aquí podrías llamar a Feign si quisieras los nombres reales,
-                    // o por ahora devolver los IDs para que el reporte sea rápido.
-                    return entityToDto(venta, "Producto ID: " + venta.getProductoId(), "N/A", "Sucursal ID: " + venta.getSucursalId());
-                })
+                .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Mapeador de Entidad a DTO para asegurar consistencia.
+     */
+    private VentaResponseDto mapToResponseDto(VentaModel entity) {
+        VentaResponseDto response = new VentaResponseDto();
+        response.setId(entity.getId());
+        response.setProductoId(entity.getProductoId());
+        response.setSucursalId(entity.getSucursalId());
+        response.setCantidad(entity.getCantidad());
+        response.setMontoTotal(entity.getMontoTotal());
+        response.setOrigen(entity.getOrigen());
+        response.setFechaVenta(entity.getFechaVenta());
+
+        // Formateo manual de fecha para el campo String (opcional)
+        if (entity.getFechaVenta() != null) {
+            response.setFechaFormateada(entity.getFechaVenta().toString());
+        }
+
+        return response;
     }
 }

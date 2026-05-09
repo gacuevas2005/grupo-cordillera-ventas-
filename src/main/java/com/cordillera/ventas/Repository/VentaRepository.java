@@ -11,4 +11,5 @@ import java.util.List;
 public interface VentaRepository extends JpaRepository<VentaModel, Long> {
     // Aquí podrías crear métodos personalizados después
     List<VentaModel> findByOrigen(String origen);
+
 }
