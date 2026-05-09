@@ -1,12 +1,12 @@
 package com.cordillera.ventas.Service;
 
-import com.cordillera.ventas.Interface.ProductoClient;
-import com.cordillera.ventas.Interface.SucursalClient;
-import com.cordillera.ventas.Interface.StockClient;
+import com.cordillera.ventas.client.ProductoClient;
+import com.cordillera.ventas.client.SucursalClient;
+import com.cordillera.ventas.client.StockClient;
 import com.cordillera.ventas.Dto.VentaRequestDto;
 import com.cordillera.ventas.Dto.VentaResponseDto;
+import com.cordillera.ventas.Dto.StockResponseDto; // Asegúrate de importar el DTO de Stock
 import com.cordillera.ventas.Model.VentaModel;
-
 import com.cordillera.ventas.Repository.VentaRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -32,8 +32,7 @@ public class VentaService {
     private StockClient stockClient;
 
     /**
-     * Crea una venta validando Producto, Sucursal y descontando Stock.
-     * Si falla el stock, la venta no se guarda (Rollback).
+     * Crea una venta validando Producto, Sucursal y descontando Stock de forma proactiva.
      */
     @Transactional
     public VentaResponseDto crearVenta(VentaRequestDto dto) {
@@ -50,7 +49,24 @@ public class VentaService {
             throw new RuntimeException("Error: La sucursal " + dto.getSucursalId() + " no existe.");
         }
 
-        // 3. Mapear y Guardar la Venta en la base de datos de Ventas
+        // --- 3. VALIDACIÓN PROACTIVA DE STOCK (Fail-Fast) ---
+        // Consultamos TODO el stock de ese producto
+        List<StockResponseDto> stocks = stockClient.obtenerPorProducto(dto.getProductoId());
+
+        // Filtramos para encontrar el inventario específico en la sucursal solicitada
+        StockResponseDto stockEnSucursal = stocks.stream()
+                .filter(s -> s.getSucursalId().equals(dto.getSucursalId()))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("No hay inventario registrado para este producto en la sucursal seleccionada."));
+
+        // Validamos que haya cantidad suficiente
+        if (stockEnSucursal.getCantidadDisponible() < dto.getCantidad()) {
+            throw new RuntimeException("Stock insuficiente: Disponibles " +
+                    stockEnSucursal.getCantidadDisponible() + ", solicitados " + dto.getCantidad());
+        }
+        // ----------------------------------------------------
+
+        // 4. Mapear y Guardar la Venta en la base de datos de Ventas (Solo llegamos aquí si hay stock validado)
         VentaModel venta = new VentaModel();
         venta.setProductoId(dto.getProductoId());
         venta.setSucursalId(dto.getSucursalId());
@@ -61,16 +77,16 @@ public class VentaService {
 
         VentaModel ventaGuardada = ventaRepository.save(venta);
 
-        // 4. Integración con Stock: Descontar las unidades vendidas
-        // Si el microservicio de Stock lanza error (ej: no hay suficientes),
-        // @Transactional cancelará el guardado de la venta automáticamente.
+        // 5. Integración con Stock: Consumir las unidades
+        // Si el microservicio de Stock falla en este punto (ej: Circuit Breaker abierto),
+        // se lanzará una RuntimeException desde el Fallback y @Transactional cancelará la venta.
         stockClient.consumirStock(
                 ventaGuardada.getProductoId(),
                 ventaGuardada.getSucursalId(),
                 ventaGuardada.getCantidad()
         );
 
-        // 5. Devolver respuesta con datos enriquecidos
+        // 6. Devolver respuesta con datos enriquecidos (Composición)
         VentaResponseDto response = mapToResponseDto(ventaGuardada);
         response.setNombreProducto(producto.getNombre()); // Viene del microservicio Productos
         response.setSkuProducto(producto.getSku());       // Viene del microservicio Productos
@@ -100,7 +116,7 @@ public class VentaService {
     }
 
     /**
-     * Mapeador de Entidad a DTO para asegurar consistencia.
+     * Mapeador interno de Entidad a DTO para asegurar consistencia.
      */
     private VentaResponseDto mapToResponseDto(VentaModel entity) {
         VentaResponseDto response = new VentaResponseDto();

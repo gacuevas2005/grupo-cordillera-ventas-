@@ -1,4 +1,4 @@
-package com.cordillera.ventas.Interface;
+package com.cordillera.ventas.client;
 
 
 import com.cordillera.ventas.Dto.SucursalResponseDto; // Debes crear este DTO sencillo
