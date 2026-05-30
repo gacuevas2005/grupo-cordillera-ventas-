@@ -122,4 +122,39 @@ public class VentaServiceTest {
         verify(ventaRepository, never()).save(any(VentaModel.class));
         verify(stockClient, never()).consumirStock(anyLong(), anyLong(), anyInt());
     }
+    @Test
+    void cuandoListarVentas_entoncesRetornaLista() {
+        when(ventaRepository.findAll()).thenReturn(List.of(ventaGuardada));
+        when(productoClient.obtenerProductoPorId(1L)).thenReturn(mockProducto);
+        when(sucursalClient.obtenerSucursalPorId(1L)).thenReturn(mockSucursal);
+
+        List<VentaResponseDto> lista = ventaService.listarVentas();
+
+        assertFalse(lista.isEmpty());
+        assertEquals(1, lista.size());
+    }
+
+    @Test
+    void cuandoListarPorOrigen_entoncesRetornaLista() {
+        when(ventaRepository.findByOrigen("WEB")).thenReturn(List.of(ventaGuardada));
+        when(productoClient.obtenerProductoPorId(1L)).thenReturn(mockProducto);
+        when(sucursalClient.obtenerSucursalPorId(1L)).thenReturn(mockSucursal);
+
+        List<VentaResponseDto> lista = ventaService.listarPorOrigen("WEB");
+
+        assertFalse(lista.isEmpty());
+        assertEquals("WEB", lista.get(0).getOrigen());
+    }
+
+    @Test
+    void cuandoProductoNoExiste_entoncesLanzaExcepcion() {
+        // Simulamos que el producto NO existe (retorna null)
+        when(productoClient.obtenerProductoPorId(1L)).thenReturn(null);
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            ventaService.crearVenta(requestDto);
+        });
+
+        assertTrue(exception.getMessage().contains("no existe"));
+    }
 }
