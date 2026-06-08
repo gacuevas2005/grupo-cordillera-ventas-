@@ -23,8 +23,8 @@ public class SecurityConfig {
 
                 // 2. Configuramos los permisos
                 .authorizeHttpRequests(auth -> auth
-                        // Permitimos la ruta de ventas y la ruta de error (para ver los fallos 500)
-                        .requestMatchers("/api/datos/ventas/**", "/error").permitAll()
+                        // ¡EL CAMBIO ESTÁ AQUÍ! Agregamos "/api/ventas/**" a la lista blanca
+                        .requestMatchers("/api/ventas/**", "/api/datos/ventas/**", "/error").permitAll()
                         // Cualquier otra cosa requerirá el usuario 'postgres'
                         .anyRequest().authenticated()
                 )
