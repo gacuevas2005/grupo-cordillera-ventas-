@@ -35,28 +35,35 @@ public class VentaService {
     public VentaResponseDto crearVenta(VentaRequestDto dto) {
         // 1. Validaciones de existencia
         var producto = productoClient.obtenerProductoPorId(dto.getProductoId());
-        if (producto == null) throw new RuntimeException("Producto no existe.");
+        if (producto == null) throw new IllegalArgumentException("El producto seleccionado no existe en la base de datos.");
 
         var sucursal = sucursalClient.obtenerSucursalPorId(dto.getSucursalId());
-        if (sucursal == null) throw new RuntimeException("Sucursal no existe.");
+        if (sucursal == null) throw new IllegalArgumentException("La sucursal seleccionada no existe.");
+
+        // 🌟 VALIDACIÓN DE PRECIO
+        Double valorEsperado = producto.getPrecio() * dto.getCantidad();
+        if (dto.getMontoTotal() < valorEsperado) {
+            throw new IllegalArgumentException("Monto insuficiente. El valor a pagar por " + dto.getCantidad() + "x " + producto.getNombre() + " es de $" + valorEsperado);
+        }
 
         // 2. Validación de Stock
         List<StockResponseDto> stocks = stockClient.obtenerPorProducto(dto.getProductoId());
         StockResponseDto stockEnSucursal = stocks.stream()
                 .filter(s -> s.getSucursalId().equals(dto.getSucursalId()))
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Sin inventario en esta sucursal."));
+                .orElseThrow(() -> new IllegalArgumentException("No hay registros de inventario para este producto en la sucursal seleccionada."));
 
         if (stockEnSucursal.getCantidadDisponible() < dto.getCantidad()) {
-            throw new RuntimeException("Stock insuficiente.");
+            throw new IllegalArgumentException("Stock insuficiente. Solo quedan " + stockEnSucursal.getCantidadDisponible() + " unidades disponibles.");
         }
 
-        // 3. Persistencia
+        // 3. Persistencia (El resto del código hacia abajo queda exactamente igual...)
         VentaModel venta = new VentaModel();
         venta.setProductoId(dto.getProductoId());
         venta.setSucursalId(dto.getSucursalId());
         venta.setCantidad(dto.getCantidad());
         venta.setOrigen(dto.getOrigen());
+        // Puedes usar el dto.getMontoTotal() o forzar directamente valorEsperado para ser más estricto
         venta.setMontoTotal(dto.getMontoTotal());
         venta.setFechaVenta(LocalDateTime.now());
 
@@ -65,7 +72,7 @@ public class VentaService {
         // 4. Consumo de Stock
         stockClient.consumirStock(ventaGuardada.getProductoId(), ventaGuardada.getSucursalId(), ventaGuardada.getCantidad());
 
-        // 5. Respuesta optimizada (Usamos los datos que ya tenemos en memoria)
+        // 5. Respuesta optimizada
         VentaResponseDto response = mapearBase(ventaGuardada);
         response.setNombreProducto(producto.getNombre());
         response.setSkuProducto(producto.getSku());
@@ -80,7 +87,6 @@ public class VentaService {
                 .collect(Collectors.toList());
     }
 
-    // --- EL MÉTODO QUE FALTABA ---
     public List<VentaResponseDto> listarPorOrigen(String origen) {
         return ventaRepository.findByOrigen(origen).stream()
                 .map(this::mapToResponseDtoEnriched)
