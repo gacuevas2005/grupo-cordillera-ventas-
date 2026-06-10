@@ -3,6 +3,7 @@ package com.cordillera.ventas.Service;
 import com.cordillera.ventas.client.ProductoClient;
 import com.cordillera.ventas.client.SucursalClient;
 import com.cordillera.ventas.client.StockClient;
+import com.cordillera.ventas.client.KpiClient;
 import com.cordillera.ventas.Dto.VentaRequestDto;
 import com.cordillera.ventas.Dto.VentaResponseDto;
 import com.cordillera.ventas.Dto.StockResponseDto;
@@ -31,6 +32,9 @@ public class VentaService {
     @Autowired
     private StockClient stockClient;
 
+    @Autowired
+    private KpiClient kpiClient;
+
     @Transactional
     public VentaResponseDto crearVenta(VentaRequestDto dto) {
         // 1. Validaciones de existencia
@@ -40,11 +44,8 @@ public class VentaService {
         var sucursal = sucursalClient.obtenerSucursalPorId(dto.getSucursalId());
         if (sucursal == null) throw new IllegalArgumentException("La sucursal seleccionada no existe.");
 
-        // 🌟 VALIDACIÓN DE PRECIO
-        Double valorEsperado = producto.getPrecio() * dto.getCantidad();
-        if (dto.getMontoTotal() < valorEsperado) {
-            throw new IllegalArgumentException("Monto insuficiente. El valor a pagar por " + dto.getCantidad() + "x " + producto.getNombre() + " es de $" + valorEsperado);
-        }
+        // 🌟 AUTOMATIZACIÓN DE PRECIO: Calculamos el monto real exacto del sistema
+        Double montoTotalCalculado = producto.getPrecio() * dto.getCantidad();
 
         // 2. Validación de Stock
         List<StockResponseDto> stocks = stockClient.obtenerPorProducto(dto.getProductoId());
@@ -57,14 +58,13 @@ public class VentaService {
             throw new IllegalArgumentException("Stock insuficiente. Solo quedan " + stockEnSucursal.getCantidadDisponible() + " unidades disponibles.");
         }
 
-        // 3. Persistencia (El resto del código hacia abajo queda exactamente igual...)
+        // 3. Persistencia
         VentaModel venta = new VentaModel();
         venta.setProductoId(dto.getProductoId());
         venta.setSucursalId(dto.getSucursalId());
         venta.setCantidad(dto.getCantidad());
         venta.setOrigen(dto.getOrigen());
-        // Puedes usar el dto.getMontoTotal() o forzar directamente valorEsperado para ser más estricto
-        venta.setMontoTotal(dto.getMontoTotal());
+        venta.setMontoTotal(montoTotalCalculado); // 👈 Guardamos el monto calculado de forma segura
         venta.setFechaVenta(LocalDateTime.now());
 
         VentaModel ventaGuardada = ventaRepository.save(venta);
@@ -72,7 +72,15 @@ public class VentaService {
         // 4. Consumo de Stock
         stockClient.consumirStock(ventaGuardada.getProductoId(), ventaGuardada.getSucursalId(), ventaGuardada.getCantidad());
 
-        // 5. Respuesta optimizada
+        // 5. TRIGGER AUTOMÁTICO DE KPIs ACUMULATIVOS
+        try {
+            kpiClient.acumularProgresoVenta(ventaGuardada.getSucursalId(), ventaGuardada.getCantidad());
+        } catch (Exception e) {
+            System.err.println("🚨 ERROR REAL DETECTADO EN KPIs:");
+            e.printStackTrace(); // 👈 ESTO nos va a mostrar el archivo, la línea y la causa real exacta
+        }
+
+        // 6. Respuesta optimizada
         VentaResponseDto response = mapearBase(ventaGuardada);
         response.setNombreProducto(producto.getNombre());
         response.setSkuProducto(producto.getSku());

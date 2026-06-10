@@ -40,7 +40,7 @@ public class SecurityConfig {
     public UserDetailsService userDetailsService() {
         UserDetails admin = User.builder()
                 .username("postgres")
-                .password("{noop}admin123")
+                .password("{noop}12345")
                 .roles("ADMIN")
                 .build();
 

@@ -21,6 +21,5 @@ public class VentaRequestDto {
     @Min(value = 1, message = "La cantidad mínima es 1")
     private Integer cantidad;
 
-    @NotNull(message = "El monto es obligatorio")
     private Double montoTotal;
 }

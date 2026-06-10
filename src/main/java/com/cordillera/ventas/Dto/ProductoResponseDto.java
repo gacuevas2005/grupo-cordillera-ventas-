@@ -12,5 +12,5 @@ public class ProductoResponseDto {
     private String descripcion;
     private Double precio;
 
-    private String nombreCategoria; // Esto es oro para el frontend
+    private String nombreCategoria;
 }
