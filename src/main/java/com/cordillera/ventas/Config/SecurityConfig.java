@@ -18,24 +18,25 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // 1. Deshabilitamos CSRF para poder hacer POST desde Postman
+                // 1. Deshabilitamos CSRF para poder operar libremente entre microservicios
                 .csrf(csrf -> csrf.disable())
 
-                // 2. Configuramos los permisos
+                // 2. Configuramos los permisos de aduana de red
                 .authorizeHttpRequests(auth -> auth
-                        // ¡EL CAMBIO ESTÁ AQUÍ! Agregamos "/api/ventas/**" a la lista blanca
+                        // 🎯 Mantenemos la ruta pública para comunicación interna ágil
                         .requestMatchers("/api/ventas/**", "/api/datos/ventas/**", "/error").permitAll()
-                        // Cualquier otra cosa requerirá el usuario 'postgres'
                         .anyRequest().authenticated()
                 )
+                // 🎯 SOLUCIÓN AL RESETEO ANÓNIMO: Permitimos que las cabeceras custom sigan de largo
+                // indicando a Spring que no purgue el contexto de peticiones permitidas de forma pública
+                .anonymous(anonymous -> anonymous.disable())
 
-                // 3. Habilitamos Autenticación Básica
+                // 3. Habilitamos Autenticación Básica de respaldo
                 .httpBasic(Customizer.withDefaults());
 
         return http.build();
     }
 
-    // Usuario de prueba igual al de Productos para no confundirse
     @Bean
     public UserDetailsService userDetailsService() {
         UserDetails admin = User.builder()
