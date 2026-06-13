@@ -15,7 +15,7 @@ public class VentaModel {
     private Long id;
 
     // Relación Many-to-One: Muchas ventas pertenecen a una sucursal
-    private Long productoId; // Solo guardamos la referencia numérica
+    private Long productoId; // Solo guardamos la referencia numéricaaaa
     private Long sucursalId;
     private String origen; // Ej: "FISICO" o "WEB"
     private Integer cantidad;
