@@ -24,9 +24,13 @@ public class SecurityConfig {
                 // 2. Configuramos los permisos
                 .authorizeHttpRequests(auth -> auth
                         // ¡EL CAMBIO ESTÁ AQUÍ! Agregamos "/api/ventas/**" a la lista blanca
-                        .requestMatchers("/api/ventas/**", "/api/datos/ventas/**", "/error").permitAll()
+                        .requestMatchers("/api/ventas/**", "/api/datos/ventas/**", "/error","/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs.yaml").permitAll()
                         // Cualquier otra cosa requerirá el usuario 'postgres'
                         .anyRequest().authenticated()
+
                 )
 
                 // 3. Habilitamos Autenticación Básica
