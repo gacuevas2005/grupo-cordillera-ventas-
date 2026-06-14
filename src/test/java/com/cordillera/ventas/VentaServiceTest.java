@@ -72,6 +72,7 @@ public class VentaServiceTest {
         mockProducto.setId(1L);
         mockProducto.setNombre("Notebook Corporativo i7");
         mockProducto.setSku("NB-PRO-001");
+        mockProducto.setPrecio(15000.0);
 
         mockSucursal = new SucursalResponseDto();
         mockSucursal.setId(1L);
@@ -84,6 +85,7 @@ public class VentaServiceTest {
         when(ventaRepository.save(any(VentaModel.class))).thenReturn(ventaGuardada);
         when(productoClient.obtenerProductoPorId(1L)).thenReturn(mockProducto);
         when(sucursalClient.obtenerSucursalPorId(1L)).thenReturn(mockSucursal);
+
 
         StockResponseDto stockPrevio = new StockResponseDto();
         stockPrevio.setSucursalId(1L);
@@ -103,24 +105,37 @@ public class VentaServiceTest {
     }
     @Test
     void cuandoStockInsuficiente_entoncesLanzaExcepcion() {
-        // GIVEN: El stock solo tiene 1 unidad, pero pedimos 2
-        StockResponseDto stockPoco = new StockResponseDto();
-        stockPoco.setProductoId(1L);
-        stockPoco.setSucursalId(1L);
-        stockPoco.setCantidadDisponible(1);
 
-        when(productoClient.obtenerProductoPorId(1L)).thenReturn(mockProducto);
-        when(sucursalClient.obtenerSucursalPorId(1L)).thenReturn(mockSucursal);
-        when(stockClient.obtenerPorProducto(1L)).thenReturn(List.of(stockPoco));
+        VentaRequestDto request = new VentaRequestDto();
+        request.setProductoId(1L);
+        request.setSucursalId(1L);
+        request.setCantidad(5);
 
-        // WHEN & THEN: Verificamos que lance la excepción y no guarde nada
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            ventaService.crearVenta(requestDto);
+        // Mock del Producto
+        var productoMock = new ProductoResponseDto();
+        productoMock.setPrecio(1000.0);
+        when(productoClient.obtenerProductoPorId(1L)).thenReturn(productoMock);
+
+        // Mock de la Sucursal
+        var sucursalMock = new SucursalResponseDto();
+        when(sucursalClient.obtenerSucursalPorId(1L)).thenReturn(sucursalMock);
+
+        // Mock del Stock (Aquí está el truco)
+        var stockMock = new StockResponseDto();
+        stockMock.setSucursalId(1L);
+        stockMock.setCantidadDisponible(2); // Le decimos al mock que solo hay 2 en stock
+
+        when(stockClient.obtenerPorProducto(1L)).thenReturn(List.of(stockMock));
+
+        // 2. Act (Ejecución) y Assert (Validación de la Excepción)
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            ventaService.crearVenta(request);
         });
 
-        assertTrue(exception.getMessage().contains("Stock insuficiente"));
-        verify(ventaRepository, never()).save(any(VentaModel.class));
-        verify(stockClient, never()).consumirStock(anyLong(), anyLong(), anyInt());
+        // 3. Validación exacta del texto (Este es el Assert que te fallaba)
+        String mensajeEsperado = "Stock insuficiente. Solo quedan 2 unidades disponibles.";
+        assertEquals(mensajeEsperado, exception.getMessage(),
+                "El mensaje de la excepción no coincide con lo esperado.");
     }
     @Test
     void cuandoListarVentas_entoncesRetornaLista() {

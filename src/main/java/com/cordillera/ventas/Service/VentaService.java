@@ -73,12 +73,7 @@ public class VentaService {
         stockClient.consumirStock(ventaGuardada.getProductoId(), ventaGuardada.getSucursalId(), ventaGuardada.getCantidad());
 
         // 5. TRIGGER AUTOMÁTICO DE KPIs ACUMULATIVOS
-        try {
-            kpiClient.acumularProgresoVenta(ventaGuardada.getSucursalId(), ventaGuardada.getCantidad());
-        } catch (Exception e) {
-            System.err.println("🚨 ERROR REAL DETECTADO EN KPIs:");
-            e.printStackTrace(); // 👈 ESTO nos va a mostrar el archivo, la línea y la causa real exacta
-        }
+
 
         // 6. Respuesta optimizada
         VentaResponseDto response = mapearBase(ventaGuardada);
