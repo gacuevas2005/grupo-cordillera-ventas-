@@ -44,7 +44,7 @@ public class VentaController {
         System.out.println("[MS-VENTAS] -> Cabecera Original X-Sucursal-Id: " + sucursalId);
         System.out.println("==========================================================");
 
-        // 🛡️ 1. Sanitización inicial de variables de trabajo locales
+        // 🛡️ 1. Sanitización inicial de variables de trabajo localesasdasdas
         String rolFinal = (rol != null && !"null".equalsIgnoreCase(rol.trim())) ? rol.trim() : null;
         Long sucursalIdFinal = sucursalId;
 
