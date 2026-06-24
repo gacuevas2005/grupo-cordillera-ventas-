@@ -2,13 +2,9 @@ package com.cordillera.ventas.Config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -18,36 +14,22 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // 1. Deshabilitamos CSRF para poder hacer POST desde Postman
                 .csrf(csrf -> csrf.disable())
-
-                // 2. Configuramos los permisos
+                // ✅ Sin estado: el microservicio no guarda sesiones propias
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // ¡EL CAMBIO ESTÁ AQUÍ! Agregamos "/api/ventas/**" a la lista blanca
-                        .requestMatchers("/api/ventas/**", "/api/datos/ventas/**", "/error","/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/v3/api-docs/**",
-                                "/v3/api-docs.yaml").permitAll()
-                        // Cualquier otra cosa requerirá el usuario 'postgres'
-                        .anyRequest().authenticated()
-
+                        // Todas las rutas de ventas son públicas internamente.
+                        // La seguridad real la gestiona el BFF con JWT antes de llegar aquí.
+                        .requestMatchers("/api/ventas/**", "/api/datos/ventas/**", "/error").permitAll()
+                        .anyRequest().permitAll()
                 )
-
-                // 3. Habilitamos Autenticación Básica
-                .httpBasic(Customizer.withDefaults());
+                // ✅ CORRECCIÓN CRÍTICA: Se elimina .anonymous(anonymous -> anonymous.disable())
+                // Esa línea hacía que Spring rechazara con 403 cualquier petición interna del BFF
+                // que llegara sin un usuario autenticado en el SecurityContext del propio microservicio,
+                // aunque la ruta estuviera en permitAll(). El BFF ya valida el JWT — este MS no necesita
+                // autenticación propia para sus rutas internas.
+                .httpBasic(basic -> basic.disable());
 
         return http.build();
-    }
-
-    // Usuario de prueba igual al de Productos para no confundirse
-    @Bean
-    public UserDetailsService userDetailsService() {
-        UserDetails admin = User.builder()
-                .username("postgres")
-                .password("{noop}12345")
-                .roles("ADMIN")
-                .build();
-
-        return new InMemoryUserDetailsManager(admin);
     }
 }

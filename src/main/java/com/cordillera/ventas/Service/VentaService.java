@@ -84,14 +84,31 @@ public class VentaService {
         return response;
     }
 
+    // 🌐 Método existente para el Administrador General (Ver todo)
     public List<VentaResponseDto> listarVentas() {
         return ventaRepository.findAll().stream()
                 .map(this::mapToResponseDtoEnriched)
                 .collect(Collectors.toList());
     }
 
+    // 🏢 🌟 NUEVO MÉTODO: Filtrado exclusivo por sucursal asignada (Gerente / Vendedor)
+    public List<VentaResponseDto> listarVentasPorSucursal(Long sucursalId) {
+        // Busca en tu VentaRepository usando el nuevo método query que crearemos abajo
+        return ventaRepository.findBySucursalId(sucursalId).stream()
+                .map(this::mapToResponseDtoEnriched)
+                .collect(Collectors.toList());
+    }
+
     public List<VentaResponseDto> listarPorOrigen(String origen) {
         return ventaRepository.findByOrigen(origen).stream()
+                .map(this::mapToResponseDtoEnriched)
+                .collect(Collectors.toList());
+    }
+
+    // 💡 Método extra por si a futuro necesitas que filtren por origen PERO también por sucursal
+    public List<VentaResponseDto> listarPorOrigenYSucursal(String origen, Long sucursalId) {
+        return ventaRepository.findByOrigen(origen).stream()
+                .filter(venta -> venta.getSucursalId().equals(sucursalId))
                 .map(this::mapToResponseDtoEnriched)
                 .collect(Collectors.toList());
     }
